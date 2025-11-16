@@ -1,31 +1,31 @@
-# github-profile-techstack-sync
+# Project Overview
 
-GitHub Action that scans your repositories, detects their tech stack, and updates your profile README with a generated “Tech Stack” section.
+This repository contains a GitHub Action that automatically scans your public and private repositories, detects their technology stack, and updates your GitHub profile README with a dynamically generated "Tech Stack" section. It helps keep your profile's proclaimed skills aligned with the actual technologies you use in your projects.
 
-## How it works
+The action is designed to run on a schedule (weekly by default) or can be triggered manually. It uses the `@specfy/stack-analyser` tool to inspect repository contents and identify languages, frameworks, and tools.
 
-- Lists repositories for a given user or organization using the GitHub API.
-- Clones each repository (shallow clone) and runs a stack analyzer.
-- Aggregates detected technologies (languages, frameworks, tools).
-- Regenerates a dedicated section in your profile README between marker comments.
-- Commits and pushes changes back to the profile repository.
+# Building and Running
 
-## Use cases
+This is a GitHub Action and is not meant to be run locally in the same way as a typical application. It is executed by the GitHub Actions runner.
 
-- Keep your profile README always aligned with your actual code.
-- Show top languages and frameworks across all repos.
-- Highlight infra and tooling (CI (Continuous Integration), cloud, databases) in one place.
+To use this action:
 
-## Quick start
+1.  **Set up your profile repository:** This is a repository named after your GitHub username (e.g., `your-username/your-username`).
+2.  **Add markers to your `README.md`:** Insert the following markers where you want the tech stack to appear:
 
-1. Create or use your profile repository:
+    ```markdown
+    <!-- TECHSTACK:START -->
+    <!-- The content below is auto-generated. Do not edit manually. -->
+    <!-- TECHSTACK:END -->
+    ```
+3.  **Configure the workflow:** Copy the `.github/workflows/tech-stack-sync.yml` file into your profile repository. The action will then run automatically.
 
-   - It must be named `<your-github-username>/<your-github-username>`.
-   - Ensure a `README.md` exists.
+# Development Conventions
 
-2. Add the Tech Stack marker to your `README.md`:
-
-   ```md
-   <!-- TECHSTACK:START -->
-   <!-- The content below is auto-generated. Do not edit manually. -->
-   <!-- TECHSTACK:END -->
+*   **Core Logic:** The main logic is contained within the `.github/workflows/tech-stack-sync.yml` file, primarily in the `Collect stacks and update README` step.
+*   **Technology Analysis:** The `@specfy/stack-analyser` npm package is the core dependency for technology detection.
+*   **Data Manipulation:** The workflow heavily relies on shell scripting, using tools like `jq` for JSON processing and `awk` for text manipulation to generate the final Markdown output.
+*   **Output:** The action generates two artifacts:
+    *   `stacks.json`: A JSON file containing the raw data of the analyzed stacks.
+    *   An updated `README.md` with the generated tech stack summary.
+*   **Committing:** The action will commit the updated `README.md` and `stacks.json` to the repository.

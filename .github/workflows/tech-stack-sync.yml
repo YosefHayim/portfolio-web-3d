@@ -26,7 +26,7 @@ jobs:
           node-version: 20
 
       - name: Install stack-analyser
-        run: npm install -g @specfy/stack-analyser jq
+        run: npm install -g @specfy/stack-analyser
 
       - name: Collect stacks and update README
         run: |
@@ -46,29 +46,33 @@ jobs:
           jq -c '.[] | select(.isFork | not)' repos.json | while read -r repo; do
             NAME="$(echo "${repo}" | jq -r '.name')"
             SSH_URL="$(echo "${repo}" | jq -r '.sshUrl')"
+            HTTPS_URL="https://github.com/${OWNER}/${NAME}.git"
             PRIVATE="$(echo "${repo}" | jq -r '.isPrivate')"
 
             REPO_DIR="${TMP_DIR}/${NAME}"
             echo "Cloning and analyzing ${NAME}..."
 
+            # Try SSH first, then HTTPS (no auth; works only for public repos)
             git clone --depth=1 "${SSH_URL}" "${REPO_DIR}" >/dev/null 2>&1 || {
-              echo "Clone failed for ${NAME}, skipping."
-              continue
+              echo "Clone failed for ${NAME} (SSH_URL: ${SSH_URL}), trying HTTPS."
+              git clone --depth=1 "${HTTPS_URL}" "${REPO_DIR}" >/dev/null 2>&1 || {
+                echo "Clone failed for ${NAME} (HTTPS_URL: ${HTTPS_URL}), skipping."
+                continue
+              }
             }
 
             # Run stack-analyser CLI; output JSON to file
-            if ! stack-analyser "${REPO_DIR}" --output="${REPO_DIR}/stack.json" >/dev/null 2>&1; then
+            npx @specfy/stack-analyser "${REPO_DIR}" --output="${REPO_DIR}/stack.json" >/dev/null 2>&1 || {
               echo "stack-analyser failed for ${NAME}, skipping."
               continue
-            fi
+            }
 
             if [ ! -f "${REPO_DIR}/stack.json" ]; then
               echo "No stack.json for ${NAME}, skipping."
               continue
-            fi
+            }
 
             # Flatten nested structure with jq only; keep category + name
-            # Expected CLI output is AnalyserJson; adapt fields if they change
             jq -c --arg name "${NAME}" \
                   --arg url "https://github.com/${OWNER}/${NAME}" \
                   --arg private "${PRIVATE}" '
@@ -102,7 +106,7 @@ jobs:
             {
               owner: $owner,
               generatedAt: $now,
-              repos: .
+              repos: ._
             }
           ' "${STACKS_JSON}" > stacks.json
 
@@ -116,7 +120,6 @@ jobs:
             exit 1
           fi
 
-          # Build section in a temp file
           SECTION_FILE="${TMP_DIR}/section.md"
 
           OWNER_NAME="$(jq -r '.owner' stacks.json)"
@@ -133,8 +136,8 @@ jobs:
 
             # Count per category+name
             jq -r '
-              .repos[]
-              | .technologies[]
+              .repos[]?
+              | .technologies[]?
               | "\(.category)|\(.name)"
             ' stacks.json \
             | sort \
@@ -166,7 +169,7 @@ jobs:
             echo "| ---------- | ------- | ---------------- |"
 
             jq -r '
-              .repos[]
+              .repos[]?
               | {
                   name: .repo.name,
                   url: .repo.url,
@@ -182,11 +185,9 @@ jobs:
             ' stacks.json
           } > "${SECTION_FILE}"
 
-          # Replace section between markers
           START_MARK="<!-- ${TECHSTACK_SECTION_MARKER}:START -->"
           END_MARK="<!-- ${TECHSTACK_SECTION_MARKER}:END -->"
 
-          # Split README
           BEFORE="$(awk -v m="$START_MARK" '{
             print; if ($0 ~ m) { exit }
           }' "${README}")"
@@ -205,6 +206,12 @@ jobs:
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "github-actions[bot]"
-          git add README.md stacks.json || true
+
+          if [ -f stacks.json ]; then
+            git add README.md stacks.json
+          else
+            git add README.md || true
+          fi
+
           git commit -m "chore: update tech stack" || echo "No changes"
           git push
